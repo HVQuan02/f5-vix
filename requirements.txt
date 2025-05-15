@@ -1,0 +1,8 @@
+audio-separator[gpu]
+# deepspeed
+# pydantic==2.10.6
+# yt-dlp
+# vinorm
+# underthesea
+Unidecode
+# sentencepiece

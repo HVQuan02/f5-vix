@@ -1,0 +1,58 @@
+{
+  "vi_dinh_soan": {
+    "ref_audio": "voices/dinh_soan/dinh_soan.wav",
+    "ref_text": "Dựng đứng hết cả dậy , như thể âm hồn từ cõi giới u minh vừa thức tỉnh , vừa trở lại dương gian . "
+  },
+  "vi_cdteam": {
+    "ref_audio": "voices/cdteam/cdteam.wav",
+    "ref_text": "Kinh tế ban đêm được hiểu là tất cả những hoạt động , dịch vụ , diễn ra sau 17h hôm trước đến 6h sáng hôm sau . "
+  },
+  "vi_thai_hoang_phi": {
+    "ref_audio": "voices/thai_hoang_phi/thai_hoang_phi.wav",
+    "ref_text": "Mến chào cô bác anh chị đã trở lại với kênh youtube của vành khuyên . "
+  },
+  "vi_web5ngay": {
+    "ref_audio": "voices/web5ngay/web5ngay.wav",
+    "ref_text": "Bạn đang nghe chương trình tri kỷ cảm xúc . Chương trình được phát sóng vào 7h tối thứ 3 hàng tuần trên kênh youtube của web 5 ngày . "
+  },
+  "vi_lat_radio": {
+    "ref_audio": "voices/lat_radio/lat_radio.wav",
+    "ref_text": "Tiếng chiêng vang lên truyền lệnh chiến trường thu binh . Trong chiến trường mấy chục vạn tướng sĩ như là trút bỏ được gánh nặng . "
+  },
+  "vi_chu_meo_di_dep": {
+    "ref_audio": "voices/chu_meo_di_dep/chu_meo_di_dep.wav",
+    "ref_text": "Bằng sự tinh ranh của mình , nó đã tìm thấy một lỗ hổng ở hàng rào và chui vào được trong vườn nho . "
+  },
+  "en_bbc_six": {
+    "ref_audio": "voices/bbc_six/bbc_six.wav",
+    "ref_text": "We think ants are industrious or hard-working . Groups of ants called colonies seem tiny , perfect societies where everyone works . "
+  },
+  "vi_nguyen_dinh_toan": {
+    "ref_audio": "voices/nguyen_dinh_toan/nguyen_dinh_toan.wav",
+    "ref_text": "Em vẫn muốn nghĩ rằng chuyến bay ngang bầu trời sẽ kết thúc bằng đôi cánh xếp lại . "
+  },
+  "vi_vanh_khuyen_le": {
+    "ref_audio": "voices/vanh_khuyen_le/vanh_khuyen_le.wav",
+    "ref_text": "Mến chào cô bác anh chị đã trở lại với kênh youtube của vành khuyên . "
+  },
+  "vi_hcm": {
+    "ref_audio": "voices/hcm/hcm.wav",
+    "ref_text": "Hỡi đồng bào cả nước . Tất cả mọi người đều sinh ra có quyền bình đẳng . "
+  },
+  "vi_trong_cute": {
+    "ref_audio": "voices/trong_cute/trong_cute.wav",
+    "ref_text": "Bắt đầu từ chánh niệm trong từng việc nhỏ . Ăn cơm , thở , đi bộ . "
+  },
+  "vi_thuytienhiep": {
+    "ref_audio": "voices/thuytienhiep/thuytienhiep.wav",
+    "ref_text": "Thân là một người quân y đặc chủng, cô không theo đuổi thần tượng, chỉ sùng bái anh hùng. Chủ nhân Mặc Cửu của lăng mộ này, chính là một trong số những anh hùng mà cô ngưỡng mộ."
+  },
+  "vi_thuykechuyen": {
+    "ref_audio": "voices/thuykechuyen/thuykechuyen.wav",
+    "ref_text": "Nhưng khi họ đến đó, họ không thấy con cọp nào cả và cậu bé vẫn bình yên vô sự. Cậu bé phá lên cười lớn và nói với dân làng rằng, “Không có con cọp nào cả, tôi làm điều này cho vui thôi!”"
+  },
+  "vi_thuy_thien": {
+    "ref_audio": "voices/thuy_thien/thuy_thien.wav",
+    "ref_text": "Bắt đầu từ tránh niệm trong từng việc nhỏ , ăn cơm , thở , đi bộ , rồi đọc thêm về tứ niệm xứ . "
+  }
+}

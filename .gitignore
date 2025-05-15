@@ -1,5 +1,11 @@
 # Customed
+*.pt
+*.ckpt
+*.safetensors
 .vscode/
+*.wav
+screenlog.*
+triton_trtllm/
 tests/
 runs/
 data/

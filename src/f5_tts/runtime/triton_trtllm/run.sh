@@ -28,6 +28,7 @@ if [ $stage -le 1 ] && [ $stop_stage -ge 1 ]; then
         --output_dir "$F5_TTS_TRT_LLM_CHECKPOINT_PATH" --model_name $model
     python_package_path=/usr/local/lib/python3.12/dist-packages
     cp -r patch/* $python_package_path/tensorrt_llm/models
+    echo "bruh bruh"
     trtllm-build --checkpoint_dir $F5_TTS_TRT_LLM_CHECKPOINT_PATH \
       --max_batch_size 8 \
       --output_dir $F5_TTS_TRT_LLM_ENGINE_PATH --remove_input_padding disable

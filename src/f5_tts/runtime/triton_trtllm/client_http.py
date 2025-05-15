@@ -35,7 +35,7 @@ def get_args():
     parser.add_argument(
         "--server-url",
         type=str,
-        default="localhost:8000",
+        default="http://localhost:8000",
         help="Address of the server",
     )
 

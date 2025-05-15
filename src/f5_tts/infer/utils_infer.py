@@ -2,14 +2,12 @@
 # Make adjustments inside functions, and consider both gradio and cli scripts if need to change func output format
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # for MPS device compatibility
 sys.path.append(f"{os.path.dirname(os.path.abspath(__file__))}/../../third_party/BigVGAN/")
 
-import hashlib
 import re
-import tempfile
 from importlib.resources import files
 
 import matplotlib
@@ -26,13 +24,12 @@ from pydub import AudioSegment, silence
 from transformers import pipeline
 from vocos import Vocos
 
-from f5_tts.model import CFM
+from f5_tts.model import CFM, CFM_v0, DiT_v0
 from f5_tts.model.utils import (
     get_tokenizer,
     convert_char_to_pinyin,
 )
-
-_ref_audio_cache = {}
+# from audio_separator.separator import Separator
 
 device = (
     "cuda"
@@ -43,6 +40,15 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
+
+# Set up parallel processing
+num_workers = max(1, os.cpu_count() - 1)
+
+# Set up GPU utilization
+if torch.cuda.is_available():
+    gpu_ids = list(range(torch.cuda.device_count()))
+else:
+    gpu_ids = []
 
 # -----------------------------------------
 
@@ -98,6 +104,8 @@ def chunk_text(text, max_chars=135):
 
 
 # load vocoder
+
+
 def load_vocoder(vocoder_name="vocos", is_local=False, local_path="", device=device, hf_cache_dir=None):
     if vocoder_name == "vocos":
         # vocoder = Vocos.from_pretrained("charactr/vocos-mel-24khz").to(device)
@@ -142,6 +150,7 @@ def load_vocoder(vocoder_name="vocos", is_local=False, local_path="", device=dev
 
 # load asr pipeline
 
+
 asr_pipe = None
 
 
@@ -161,10 +170,6 @@ def initialize_asr_pipeline(device: str = device, dtype=None):
         torch_dtype=dtype,
         device=device,
     )
-
-
-# transcribe
-
 
 def transcribe(ref_audio, language=None):
     global asr_pipe
@@ -249,121 +254,126 @@ def load_model(
     print("model : ", ckpt_path, "\n")
 
     vocab_char_map, vocab_size = get_tokenizer(vocab_file, tokenizer)
-    model = CFM(
-        transformer=model_cls(**model_cfg, text_num_embeds=vocab_size, mel_dim=n_mel_channels),
-        mel_spec_kwargs=dict(
-            n_fft=n_fft,
-            hop_length=hop_length,
-            win_length=win_length,
-            n_mel_channels=n_mel_channels,
-            target_sample_rate=target_sample_rate,
-            mel_spec_type=mel_spec_type,
-        ),
-        odeint_kwargs=dict(
-            method=ode_method,
-        ),
-        vocab_char_map=vocab_char_map,
-    ).to(device)
+    if model_cls == DiT_v0:
+        model = CFM_v0(
+            transformer=model_cls(**model_cfg, text_num_embeds=vocab_size, mel_dim=n_mel_channels),
+            mel_spec_kwargs=dict(
+                n_fft=n_fft,
+                hop_length=hop_length,
+                win_length=win_length,
+                n_mel_channels=n_mel_channels,
+                target_sample_rate=target_sample_rate,
+                mel_spec_type=mel_spec_type,
+            ),
+            odeint_kwargs=dict(
+                method=ode_method,
+            ),
+            vocab_char_map=vocab_char_map,
+        ).to(device)
+    else:
+        model = CFM(
+            transformer=model_cls(**model_cfg, text_num_embeds=vocab_size, mel_dim=n_mel_channels),
+            mel_spec_kwargs=dict(
+                n_fft=n_fft,
+                hop_length=hop_length,
+                win_length=win_length,
+                n_mel_channels=n_mel_channels,
+                target_sample_rate=target_sample_rate,
+                mel_spec_type=mel_spec_type,
+            ),
+            odeint_kwargs=dict(
+                method=ode_method,
+            ),
+            vocab_char_map=vocab_char_map,
+        ).to(device)
 
     dtype = torch.float32 if mel_spec_type == "bigvgan" else None
     model = load_checkpoint(model, ckpt_path, device, dtype=dtype, use_ema=use_ema)
 
+    '''
+    ds_engine = deepspeed.init_inference(model,
+                                     tensor_parallel={"tp_size": len(gpu_ids)},
+                                     dtype=torch.float16,
+                                     replace_with_kernel_inject=True)
+    model = ds_engine.module
+    '''
+
     return model
 
+# def process_deecho(audio_files, output_dir, model_path, sample_rate):
+#     """Process audio files with deecho in parallel using available GPUs"""
+#     output_files = []
 
-def remove_silence_edges(audio, silence_threshold=-42):
-    # Remove silence from the start
-    non_silent_start_idx = silence.detect_leading_silence(audio, silence_threshold=silence_threshold)
-    audio = audio[non_silent_start_idx:]
+#     # Distribute audio files across available GPUs
+#     if gpu_ids:
+#         # Split files among available GPUs
+#         gpu_batches = [[] for _ in range(len(gpu_ids))]
+#         for i, audio_file in enumerate(audio_files):
+#             gpu_idx = i % len(gpu_ids)
+#             gpu_batches[gpu_idx].append(audio_file)
+        
+#         # Process batches in parallel on different GPUs
+#         with ThreadPoolExecutor(max_workers=len(gpu_ids)) as executor:
+#             futures = []
+#             for gpu_idx, batch in enumerate(gpu_batches):
+#                 if batch:  # Skip empty batches
+#                     futures.append(
+#                         executor.submit(
+#                             _process_deecho_batch, 
+#                             output_dir, 
+#                             batch, 
+#                             model_path, 
+#                             sample_rate, 
+#                             gpu_ids[gpu_idx]
+#                         )
+#                     )
+            
+#             # Collect results
+#             for future in as_completed(futures):
+#                 output_files.extend(future.result())
+#     else:
+#         # No GPUs available, process on CPU
+#         output_files = _process_deecho_batch(input_dir, output_dir, audio_files, model_path, sample_rate, None)
+    
+#     return output_files
 
-    # Remove silence from the end
-    non_silent_end_duration = audio.duration_seconds
-    for ms in reversed(audio):
-        if ms.dBFS > silence_threshold:
-            break
-        non_silent_end_duration -= 0.001
-    trimmed_audio = audio[: int(non_silent_end_duration * 1000)]
 
-    return trimmed_audio
+# def _process_deecho_batch(output_dir, audio_files, model_path, sample_rate, gpu_id):
+#     """Process a batch of files on a specific GPU"""
+#     if gpu_id is not None:
+#         torch.cuda.set_device(gpu_id)
+#         device = torch.device(f"cuda:{gpu_id}")
+#         print(f"Processing deecho batch on GPU {gpu_id}")
+#     else:
+#         device = torch.device("cpu")
+#         print("Processing deecho batch on CPU")
+    
+#     # Initialize Separator for this batch
+#     separator = Separator(
+#         output_dir=output_dir,
+#         output_format="WAV",
+#         output_single_stem="No Echo",
+#         sample_rate=sample_rate,
+#         use_autocast=torch.cuda.is_available()
+#     )
 
+#     # Load model
+#     separator.load_model(model_filename=model_path)
 
-# preprocess reference audio and text
+#     output_files = []
+#     for audio_file in tqdm.tqdm(audio_files, desc = f"DeEcho {f'GPU {gpu_id}' if gpu_id is not None else 'CPU'}"):
+#         try:
+#             output_paths = separator.separate(audio_file, {"No Echo": os.path.splitext(audio_file)[0]})
+#             if output_paths:
+#                 output_file = os.path.join(output_dir, output_paths[0])
+#                 output_files.append(output_file)
+#         except Exception as e:
+#             print(f"Error processing {audio_file} in deecho: {str(e)}")
 
-
-def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_info=print):
-    show_info("Converting audio...")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
-        aseg = AudioSegment.from_file(ref_audio_orig)
-
-        if clip_short:
-            # 1. try to find long silence for clipping
-            non_silent_segs = silence.split_on_silence(
-                aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=1000, seek_step=10
-            )
-            non_silent_wave = AudioSegment.silent(duration=0)
-            for non_silent_seg in non_silent_segs:
-                if len(non_silent_wave) > 6000 and len(non_silent_wave + non_silent_seg) > 12000:
-                    show_info("Audio is over 12s, clipping short. (1)")
-                    break
-                non_silent_wave += non_silent_seg
-
-            # 2. try to find short silence for clipping if 1. failed
-            if len(non_silent_wave) > 12000:
-                non_silent_segs = silence.split_on_silence(
-                    aseg, min_silence_len=100, silence_thresh=-40, keep_silence=1000, seek_step=10
-                )
-                non_silent_wave = AudioSegment.silent(duration=0)
-                for non_silent_seg in non_silent_segs:
-                    if len(non_silent_wave) > 6000 and len(non_silent_wave + non_silent_seg) > 12000:
-                        show_info("Audio is over 12s, clipping short. (2)")
-                        break
-                    non_silent_wave += non_silent_seg
-
-            aseg = non_silent_wave
-
-            # 3. if no proper silence found for clipping
-            if len(aseg) > 12000:
-                aseg = aseg[:12000]
-                show_info("Audio is over 12s, clipping short. (3)")
-
-        aseg = remove_silence_edges(aseg) + AudioSegment.silent(duration=50)
-        aseg.export(f.name, format="wav")
-        ref_audio = f.name
-
-    # Compute a hash of the reference audio file
-    with open(ref_audio, "rb") as audio_file:
-        audio_data = audio_file.read()
-        audio_hash = hashlib.md5(audio_data).hexdigest()
-
-    if not ref_text.strip():
-        global _ref_audio_cache
-        if audio_hash in _ref_audio_cache:
-            # Use cached asr transcription
-            show_info("Using cached reference text...")
-            ref_text = _ref_audio_cache[audio_hash]
-        else:
-            show_info("No reference text provided, transcribing reference audio...")
-            ref_text = transcribe(ref_audio)
-            # Cache the transcribed text (not caching custom ref_text, enabling users to do manual tweak)
-            _ref_audio_cache[audio_hash] = ref_text
-    else:
-        show_info("Using custom reference text...")
-
-    # Ensure ref_text ends with a proper sentence-ending punctuation
-    if not ref_text.endswith(". ") and not ref_text.endswith("。"):
-        if ref_text.endswith("."):
-            ref_text += " "
-        else:
-            ref_text += ". "
-
-    print("\nref_text  ", ref_text)
-
-    return ref_audio, ref_text
+#     return output_files
 
 
 # infer process: chunk text -> infer batches [i.e. infer_batch_process()]
-
-
 def infer_process(
     ref_audio,
     ref_text,
@@ -384,7 +394,7 @@ def infer_process(
 ):
     # Split the input text into batches
     audio, sr = torchaudio.load(ref_audio)
-    max_chars = int(len(ref_text.encode("utf-8")) / (audio.shape[-1] / sr) * (22 - audio.shape[-1] / sr))
+    max_chars = int(len(ref_text.encode("utf-8")) / (audio.shape[-1] / sr) * (13 - audio.shape[-1] / sr))
     gen_text_batches = chunk_text(gen_text, max_chars=max_chars)
     for i, gen_text in enumerate(gen_text_batches):
         print(f"gen_text {i}", gen_text)
@@ -444,6 +454,7 @@ def infer_batch_process(
     if sr != target_sample_rate:
         resampler = torchaudio.transforms.Resample(sr, target_sample_rate)
         audio = resampler(audio)
+
     audio = audio.to(device)
 
     generated_waves = []
@@ -452,6 +463,7 @@ def infer_batch_process(
     if len(ref_text[-1].encode("utf-8")) == 1:
         ref_text = ref_text + " "
 
+    '''
     def process_batch(gen_text):
         local_speed = speed
         if len(gen_text.encode("utf-8")) < 10:
@@ -502,14 +514,91 @@ def infer_batch_process(
                 generated_cpu = generated[0].cpu().numpy()
                 del generated
                 yield generated_wave, generated_cpu
+    '''
 
+    def process_batch(model_obj, vocoder, audio, device, gen_text, gpu_id):
+        if gpu_id is not None:
+            torch.cuda.set_device(gpu_id)
+            device = torch.device(f"cuda:{gpu_id}")
+
+        model_obj = model_obj.to(device)
+        audio = audio.to(device)
+        vocoder = vocoder.to(device)
+
+        local_speed = speed
+        if len(gen_text.encode("utf-8")) < 10:
+            local_speed = 0.3
+
+        # Prepare the text
+        text_list = [ref_text + gen_text]
+        final_text_list = convert_char_to_pinyin(text_list)
+
+        ref_audio_len = audio.shape[-1] // hop_length
+        if fix_duration is not None:
+            duration = int(fix_duration * target_sample_rate / hop_length)
+        else:
+            # Calculate duration
+            ref_text_len = len(ref_text.encode("utf-8"))
+            gen_text_len = len(gen_text.encode("utf-8"))
+            duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed)
+
+        # inference
+        with torch.inference_mode():
+            generated, _ = model_obj.sample(
+                cond=audio,
+                text=final_text_list,
+                duration=duration,
+                steps=nfe_step,
+                cfg_strength=cfg_strength,
+                sway_sampling_coef=sway_sampling_coef,
+            )
+            del _
+
+            generated = generated.to(torch.float32)  # generated mel spectrogram
+            generated = generated[:, ref_audio_len:, :]
+            generated = generated.permute(0, 2, 1)
+            if mel_spec_type == "vocos":
+                generated_wave = vocoder.decode(generated)
+            elif mel_spec_type == "bigvgan":
+                generated_wave = vocoder(generated)
+            if rms < target_rms:
+                generated_wave = generated_wave * rms / target_rms
+
+            # wav -> numpy
+            generated_wave = generated_wave.squeeze().cpu().numpy()
+
+            if streaming:
+                for j in range(0, len(generated_wave), chunk_size):
+                    yield generated_wave[j : j + chunk_size], target_sample_rate
+            else:
+                generated_cpu = generated[0].cpu().numpy()
+                del generated
+                yield generated_wave, generated_cpu
     if streaming:
         for gen_text in progress.tqdm(gen_text_batches) if progress is not None else gen_text_batches:
-            for chunk in process_batch(gen_text):
+            for chunk in process_batch(model_obj, vocoder, audio, device, gen_text):
+            # for chunk in process_batch(gen_text):
                 yield chunk
     else:
+        '''
         with ThreadPoolExecutor() as executor:
             futures = [executor.submit(process_batch, gen_text) for gen_text in gen_text_batches]
+        '''
+        with ThreadPoolExecutor(max_workers=len(gpu_ids) if gpu_ids else num_workers) as executor:
+            futures = []
+            for idx, gen_text in enumerate(gen_text_batches):
+                if gen_text:
+                    futures.append(
+                        executor.submit(
+                            process_batch,
+                            model_obj,
+                            vocoder,
+                            audio,
+                            device,
+                            gen_text,
+                            gpu_ids[idx % len(gpu_ids) if gpu_ids else None]
+                        )
+                    )
             for future in progress.tqdm(futures) if progress is not None else futures:
                 result = future.result()
                 if result:
